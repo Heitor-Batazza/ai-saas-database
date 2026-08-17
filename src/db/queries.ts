@@ -1,4 +1,4 @@
-import { db } from './index.js';
+import { db } from './index';
 import {
   users,
   workspaces,
@@ -7,7 +7,7 @@ import {
   documentChunks,
   usageLogs,
   apiKeys,
-} from './schema.js';
+} from './schema';
 import { eq, desc, sql } from 'drizzle-orm';
 
 /**
@@ -54,7 +54,6 @@ export async function getWorkspaceUsageSummary(workspaceId: string) {
  * --------------------------------------------------------------------------------
  * CONSULTA 3: Busca Semântica por Similaridade Vetorial (RAG Core)
  * --------------------------------------------------------------------------------
- * Utiliza o operador de Distância de Cosseno (<=>) do pgvector no PostgreSQL.
  */
 export async function findSimilarChunks(
   workspaceId: string,
@@ -86,20 +85,14 @@ export async function findSimilarChunks(
 async function runDemo() {
   console.log('⚡ Executando consultas no Supabase...\n');
 
-  // 1. Testar busca aninhada de Workspace
-  console.log('🔍 [1] Buscando detalhes completos do workspace "tech-labs-ai":');
   const ws = await getWorkspaceWithDetails('tech-labs-ai');
   if (ws) {
     console.log(`🏢 Workspace: ${ws.name} (Plano: ${ws.planTier.toUpperCase()} | Créditos: ${ws.creditsBalance})`);
     console.log(`👥 Membros (${ws.members.length}):`, ws.members.map((m) => `${m.user.fullName} (${m.role})`).join(', '));
     console.log(`📄 Documentos (${ws.documents.length}):`, ws.documents.map((d) => d.title).join(', '));
-  }
 
-  console.log('\n------------------------------------------------------------\n');
+    console.log('\n------------------------------------------------------------\n');
 
-  // 2. Testar métricas de consumo de IA
-  if (ws) {
-    console.log('📊 [2] Calculando consumo de IA e créditos gastos:');
     const usage = await getWorkspaceUsageSummary(ws.id);
     console.log(`Tokens Consumidos: ${usage.totalTokens}`);
     console.log(`Créditos Gastos: ${usage.totalCreditsSpent}`);
@@ -107,8 +100,6 @@ async function runDemo() {
 
     console.log('\n------------------------------------------------------------\n');
 
-    // 3. Testar Busca Semântica Vetorial (RAG)
-    console.log('🧠 [3] Testando Busca Semântica Vetorial com pgvector (Cálculo de Cosseno):');
     const mockQueryVector = Array.from({ length: 1536 }, () => Number((Math.random() * 2 - 1).toFixed(4)));
     const similarChunks = await findSimilarChunks(ws.id, mockQueryVector, 2);
 
@@ -120,10 +111,8 @@ async function runDemo() {
   }
 
   console.log('\n✅ Todas as consultas foram executadas com sucesso!');
-  process.exit(0);
 }
 
-runDemo().catch((err) => {
-  console.error('❌ Erro na consulta:', err);
-  process.exit(1);
-});
+if (process.argv[1] && process.argv[1].endsWith('queries.ts')) {
+  runDemo().catch(console.error);
+}
