@@ -12,10 +12,8 @@ import { eq, desc, sql } from 'drizzle-orm';
 
 /**
  * --------------------------------------------------------------------------------
- * EXEMPLO 1: Consulta Relacional Completa (com Joins Automáticos)
+ * CONSULTA 1: Busca Relacional Completa (Joins Automáticos com Drizzle)
  * --------------------------------------------------------------------------------
- * Busca um workspace pelo slug trazendo todos os membros, seus dados de usuário
- * e a lista de documentos cadastrados com apenas uma query eficiente.
  */
 export async function getWorkspaceWithDetails(slug: string) {
   return await db.query.workspaces.findFirst({
@@ -36,10 +34,8 @@ export async function getWorkspaceWithDetails(slug: string) {
 
 /**
  * --------------------------------------------------------------------------------
- * EXEMPLO 2: Rastreamento de Consumo de Tokens & Créditos por Workspace
+ * CONSULTA 2: Agregação de Consumo de Tokens & Créditos
  * --------------------------------------------------------------------------------
- * Agrupa todos os logs de uso de IA para calcular o total de tokens gastos
- * e o total de créditos consumidos no mês.
  */
 export async function getWorkspaceUsageSummary(workspaceId: string) {
   const [summary] = await db
@@ -56,16 +52,14 @@ export async function getWorkspaceUsageSummary(workspaceId: string) {
 
 /**
  * --------------------------------------------------------------------------------
- * EXEMPLO 3: Busca Semântica por Similaridade Vetorial (RAG Core)
+ * CONSULTA 3: Busca Semântica por Similaridade Vetorial (RAG Core)
  * --------------------------------------------------------------------------------
- * Recebe o vetor da pergunta do usuário (1536 dimensões) e calcula a Distância
- * de Cosseno (<=> no PostgreSQL com pgvector) para achar os chunks mais relevantes.
+ * Utiliza o operador de Distância de Cosseno (<=>) do pgvector no PostgreSQL.
  */
 export async function findSimilarChunks(
   workspaceId: string,
   queryEmbedding: number[],
-  limit = 5,
-  similarityThreshold = 0.7
+  limit = 3
 ) {
   const similarity = sql<number>`1 - (${documentChunks.embedding} <=> ${JSON.stringify(queryEmbedding)}::vector)`;
 
@@ -79,9 +73,57 @@ export async function findSimilarChunks(
     })
     .from(documentChunks)
     .innerJoin(documents, eq(documentChunks.documentId, documents.id))
-    .where(
-      sql`${documents.workspaceId} = ${workspaceId} AND ${similarity} > ${similarityThreshold}`
-    )
+    .where(eq(documents.workspaceId, workspaceId))
     .orderBy(desc(similarity))
     .limit(limit);
 }
+
+/**
+ * --------------------------------------------------------------------------------
+ * DEMONSTRAÇÃO EXECUTÁVEL
+ * --------------------------------------------------------------------------------
+ */
+async function runDemo() {
+  console.log('⚡ Executando consultas no Supabase...\n');
+
+  // 1. Testar busca aninhada de Workspace
+  console.log('🔍 [1] Buscando detalhes completos do workspace "tech-labs-ai":');
+  const ws = await getWorkspaceWithDetails('tech-labs-ai');
+  if (ws) {
+    console.log(`🏢 Workspace: ${ws.name} (Plano: ${ws.planTier.toUpperCase()} | Créditos: ${ws.creditsBalance})`);
+    console.log(`👥 Membros (${ws.members.length}):`, ws.members.map((m) => `${m.user.fullName} (${m.role})`).join(', '));
+    console.log(`📄 Documentos (${ws.documents.length}):`, ws.documents.map((d) => d.title).join(', '));
+  }
+
+  console.log('\n------------------------------------------------------------\n');
+
+  // 2. Testar métricas de consumo de IA
+  if (ws) {
+    console.log('📊 [2] Calculando consumo de IA e créditos gastos:');
+    const usage = await getWorkspaceUsageSummary(ws.id);
+    console.log(`Tokens Consumidos: ${usage.totalTokens}`);
+    console.log(`Créditos Gastos: ${usage.totalCreditsSpent}`);
+    console.log(`Chamadas de IA Registradas: ${usage.totalQueries}`);
+
+    console.log('\n------------------------------------------------------------\n');
+
+    // 3. Testar Busca Semântica Vetorial (RAG)
+    console.log('🧠 [3] Testando Busca Semântica Vetorial com pgvector (Cálculo de Cosseno):');
+    const mockQueryVector = Array.from({ length: 1536 }, () => Number((Math.random() * 2 - 1).toFixed(4)));
+    const similarChunks = await findSimilarChunks(ws.id, mockQueryVector, 2);
+
+    similarChunks.forEach((chunk, index) => {
+      console.log(`\nResultado #${index + 1} (Score de Similaridade: ${(Number(chunk.similarityScore) * 100).toFixed(2)}%):`);
+      console.log(`📖 Documento: "${chunk.documentTitle}"`);
+      console.log(`💬 Trecho recuperado: "${chunk.content}"`);
+    });
+  }
+
+  console.log('\n✅ Todas as consultas foram executadas com sucesso!');
+  process.exit(0);
+}
+
+runDemo().catch((err) => {
+  console.error('❌ Erro na consulta:', err);
+  process.exit(1);
+});
